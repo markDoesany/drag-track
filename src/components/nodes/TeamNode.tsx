@@ -6,9 +6,9 @@ import { Users } from "lucide-react";
 import type { NodeData } from "@/types/canvas";
 import { NODE_COLORS } from "@/types/canvas";
 
-function PersonNode({ data, selected }: NodeProps) {
+function TeamNode({ data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
-  const colors = NODE_COLORS.person;
+  const colors = NODE_COLORS.team;
 
   return (
     <div className="relative flex items-center justify-center">
@@ -35,4 +35,4 @@ function PersonNode({ data, selected }: NodeProps) {
   );
 }
 
-export default memo(PersonNode);
+export default memo(TeamNode);

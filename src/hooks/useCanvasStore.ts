@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   applyNodeChanges,
   applyEdgeChanges,
@@ -11,88 +11,123 @@ import {
 } from "@xyflow/react";
 import { v4 as uuid } from "uuid";
 import type {
+  Canvas,
   CanvasNode,
   CanvasEdge,
-  CanvasWorkspace,
+  CanvasLevel,
+  AppState,
   NodeType,
   NodeData,
   RelationshipType,
 } from "@/types/canvas";
+import { DRILLABLE_TYPES } from "@/types/canvas";
 import { createDefaultNodeData } from "@/lib/defaults";
-import {
-  loadWorkspaces,
-  saveWorkspaces,
-  getActiveWorkspaceId,
-  setActiveWorkspaceId,
-} from "@/lib/storage";
+import { loadAppState, saveAppState } from "@/lib/storage";
 
-function createWorkspace(name: string): CanvasWorkspace {
+function createCanvas(
+  level: CanvasLevel,
+  title: string,
+  parentCanvasId: string | null,
+  parentNodeId: string | null,
+  projectId: string | null
+): Canvas {
+  const now = new Date().toISOString();
   return {
     id: uuid(),
-    name,
-    nodes: [],
-    edges: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    level,
+    title,
+    parentCanvasId,
+    parentNodeId,
+    projectId,
+    createdAt: now,
+    updatedAt: now,
   };
 }
 
+export interface BreadcrumbItem {
+  canvasId: string;
+  title: string;
+  level: CanvasLevel;
+}
+
 export function useCanvasStore() {
-  const [workspaces, setWorkspaces] = useState<CanvasWorkspace[]>([]);
-  const [activeWorkspaceId, setActiveId] = useState<string | null>(null);
+  const [canvases, setCanvases] = useState<Canvas[]>([]);
+  const [nodes, setNodes] = useState<CanvasNode[]>([]);
+  const [edges, setEdges] = useState<CanvasEdge[]>([]);
+  const [activeCanvasId, setActiveCanvasId] = useState<string>("");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    const loaded = loadWorkspaces();
-    const storedActive = getActiveWorkspaceId();
-    if (loaded.length > 0) {
-      setWorkspaces(loaded);
-      setActiveId(storedActive && loaded.find((w) => w.id === storedActive) ? storedActive : loaded[0].id);
+    const state = loadAppState();
+    if (state) {
+      setCanvases(state.canvases);
+      setNodes(state.nodes);
+      setEdges(state.edges);
+      setActiveCanvasId(state.activeCanvasId);
     } else {
-      const first = createWorkspace("Canvas 1");
-      setWorkspaces([first]);
-      setActiveId(first.id);
+      const workspace = createCanvas("workspace", "All Projects", null, null, null);
+      setCanvases([workspace]);
+      setActiveCanvasId(workspace.id);
     }
     setInitialized(true);
   }, []);
 
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) ?? null;
-  const nodes = activeWorkspace?.nodes ?? [];
-  const edges = activeWorkspace?.edges ?? [];
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
-
-  const updateActiveWorkspace = useCallback(
-    (updater: (ws: CanvasWorkspace) => CanvasWorkspace) => {
-      setWorkspaces((prev) =>
-        prev.map((w) =>
-          w.id === activeWorkspaceId
-            ? updater({ ...w, updatedAt: new Date().toISOString() })
-            : w
-        )
-      );
-    },
-    [activeWorkspaceId]
+  const activeCanvas = useMemo(
+    () => canvases.find((c) => c.id === activeCanvasId) ?? null,
+    [canvases, activeCanvasId]
   );
+
+  const currentNodes = useMemo(
+    () => nodes.filter((n) => n.data.canvasId === activeCanvasId),
+    [nodes, activeCanvasId]
+  );
+
+  const currentEdges = useMemo(
+    () => edges.filter((e) => e.data?.canvasId === activeCanvasId),
+    [edges, activeCanvasId]
+  );
+
+  const selectedNode = useMemo(
+    () => currentNodes.find((n) => n.id === selectedNodeId) ?? null,
+    [currentNodes, selectedNodeId]
+  );
+
+  // Build breadcrumb path from root to active canvas
+  const breadcrumbs = useMemo((): BreadcrumbItem[] => {
+    const path: BreadcrumbItem[] = [];
+    let current = activeCanvas;
+    while (current) {
+      path.unshift({ canvasId: current.id, title: current.title, level: current.level });
+      current = current.parentCanvasId
+        ? canvases.find((c) => c.id === current!.parentCanvasId) ?? null
+        : null;
+    }
+    return path;
+  }, [activeCanvas, canvases]);
 
   const onNodesChange: OnNodesChange = useCallback(
     (changes) => {
-      updateActiveWorkspace((ws) => ({
-        ...ws,
-        nodes: applyNodeChanges(changes, ws.nodes) as CanvasNode[],
-      }));
+      setNodes((prev) => {
+        const canvasNodes = prev.filter((n) => n.data.canvasId === activeCanvasId);
+        const otherNodes = prev.filter((n) => n.data.canvasId !== activeCanvasId);
+        const updated = applyNodeChanges(changes, canvasNodes) as CanvasNode[];
+        return [...otherNodes, ...updated];
+      });
     },
-    [updateActiveWorkspace]
+    [activeCanvasId]
   );
 
   const onEdgesChange: OnEdgesChange = useCallback(
     (changes) => {
-      updateActiveWorkspace((ws) => ({
-        ...ws,
-        edges: applyEdgeChanges(changes, ws.edges) as CanvasEdge[],
-      }));
+      setEdges((prev) => {
+        const canvasEdges = prev.filter((e) => e.data?.canvasId === activeCanvasId);
+        const otherEdges = prev.filter((e) => e.data?.canvasId !== activeCanvasId);
+        const updated = applyEdgeChanges(changes, canvasEdges) as CanvasEdge[];
+        return [...otherEdges, ...updated];
+      });
     },
-    [updateActiveWorkspace]
+    [activeCanvasId]
   );
 
   const onConnect = useCallback(
@@ -102,14 +137,11 @@ export function useCanvasStore() {
         id: uuid(),
         type: "smoothstep",
         label: "Related To",
-        data: { relationship: "related-to" as RelationshipType },
+        data: { relationship: "related-to" as RelationshipType, canvasId: activeCanvasId },
       };
-      updateActiveWorkspace((ws) => ({
-        ...ws,
-        edges: addEdge(newEdge, ws.edges) as CanvasEdge[],
-      }));
+      setEdges((prev) => addEdge(newEdge, prev) as CanvasEdge[]);
     },
-    [updateActiveWorkspace]
+    [activeCanvasId]
   );
 
   const addNode = useCallback(
@@ -118,131 +150,155 @@ export function useCanvasStore() {
         id: uuid(),
         type: nodeType,
         position,
-        data: createDefaultNodeData(nodeType),
+        data: createDefaultNodeData(nodeType, activeCanvasId),
       };
-      updateActiveWorkspace((ws) => ({
-        ...ws,
-        nodes: [...ws.nodes, newNode],
-      }));
+      setNodes((prev) => [...prev, newNode]);
       setSelectedNodeId(newNode.id);
       return newNode;
     },
-    [updateActiveWorkspace]
+    [activeCanvasId]
   );
 
   const updateNodeData = useCallback(
     (nodeId: string, updates: Partial<NodeData>) => {
-      updateActiveWorkspace((ws) => ({
-        ...ws,
-        nodes: ws.nodes.map((n) =>
+      setNodes((prev) =>
+        prev.map((n) =>
           n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
-        ),
-      }));
+        )
+      );
+      // If title changed and there's a child canvas for this node, update its title too
+      if (updates.title) {
+        setCanvases((prev) =>
+          prev.map((c) =>
+            c.parentNodeId === nodeId ? { ...c, title: updates.title! } : c
+          )
+        );
+      }
     },
-    [updateActiveWorkspace]
+    []
   );
 
   const deleteNode = useCallback(
     (nodeId: string) => {
-      updateActiveWorkspace((ws) => ({
-        ...ws,
-        nodes: ws.nodes.filter((n) => n.id !== nodeId),
-        edges: ws.edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
-      }));
+      // Also delete any child canvases and their nodes/edges recursively
+      const childCanvasIds = new Set<string>();
+      const collectChildren = (parentNodeId: string) => {
+        const childCanvases = canvases.filter((c) => c.parentNodeId === parentNodeId);
+        for (const child of childCanvases) {
+          childCanvasIds.add(child.id);
+          const childNodes = nodes.filter((n) => n.data.canvasId === child.id);
+          for (const cn of childNodes) {
+            collectChildren(cn.id);
+          }
+        }
+      };
+      collectChildren(nodeId);
+
+      setNodes((prev) =>
+        prev.filter((n) => n.id !== nodeId && !childCanvasIds.has(n.data.canvasId))
+      );
+      setEdges((prev) =>
+        prev.filter(
+          (e) =>
+            e.source !== nodeId &&
+            e.target !== nodeId &&
+            !childCanvasIds.has(e.data?.canvasId ?? "")
+        )
+      );
+      setCanvases((prev) => prev.filter((c) => !childCanvasIds.has(c.id)));
       if (selectedNodeId === nodeId) setSelectedNodeId(null);
     },
-    [updateActiveWorkspace, selectedNodeId]
+    [canvases, nodes, selectedNodeId]
   );
 
-  const deleteEdge = useCallback(
-    (edgeId: string) => {
-      updateActiveWorkspace((ws) => ({
-        ...ws,
-        edges: ws.edges.filter((e) => e.id !== edgeId),
-      }));
+  const deleteEdge = useCallback((edgeId: string) => {
+    setEdges((prev) => prev.filter((e) => e.id !== edgeId));
+  }, []);
+
+  // Navigate into a node (drill down)
+  const navigateInto = useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node || !DRILLABLE_TYPES.includes(node.data.nodeType)) return;
+
+      // Check if a child canvas already exists for this node
+      let childCanvas = canvases.find((c) => c.parentNodeId === nodeId);
+
+      if (!childCanvas) {
+        // Determine child level
+        const currentLevel = activeCanvas?.level;
+        let childLevel: CanvasLevel;
+        if (currentLevel === "workspace") {
+          childLevel = "project";
+        } else if (currentLevel === "project") {
+          childLevel = "component";
+        } else {
+          return; // Can't go deeper than component
+        }
+
+        // Determine projectId
+        const projectId =
+          currentLevel === "workspace" ? nodeId : (activeCanvas?.projectId ?? null);
+
+        childCanvas = createCanvas(
+          childLevel,
+          node.data.title,
+          activeCanvasId,
+          nodeId,
+          projectId
+        );
+        setCanvases((prev) => [...prev, childCanvas!]);
+      }
+
+      setActiveCanvasId(childCanvas.id);
+      setSelectedNodeId(null);
     },
-    [updateActiveWorkspace]
+    [nodes, canvases, activeCanvas, activeCanvasId]
   );
 
-  const updateEdgeRelationship = useCallback(
-    (edgeId: string, relationship: RelationshipType, label: string) => {
-      updateActiveWorkspace((ws) => ({
-        ...ws,
-        edges: ws.edges.map((e) =>
-          e.id === edgeId ? { ...e, label, data: { ...e.data, relationship } } : e
-        ),
-      }));
-    },
-    [updateActiveWorkspace]
-  );
+  // Navigate to a specific canvas (breadcrumb click)
+  const navigateTo = useCallback((canvasId: string) => {
+    setActiveCanvasId(canvasId);
+    setSelectedNodeId(null);
+  }, []);
+
+  // Navigate up one level
+  const navigateUp = useCallback(() => {
+    if (activeCanvas?.parentCanvasId) {
+      setActiveCanvasId(activeCanvas.parentCanvasId);
+      setSelectedNodeId(null);
+    }
+  }, [activeCanvas]);
 
   const save = useCallback(() => {
-    saveWorkspaces(workspaces);
-    if (activeWorkspaceId) setActiveWorkspaceId(activeWorkspaceId);
-  }, [workspaces, activeWorkspaceId]);
+    const state: AppState = { canvases, nodes, edges, activeCanvasId };
+    saveAppState(state);
+  }, [canvases, nodes, edges, activeCanvasId]);
 
   const clearCanvas = useCallback(() => {
-    updateActiveWorkspace((ws) => ({ ...ws, nodes: [], edges: [] }));
+    // Clear only nodes and edges on the current canvas
+    setNodes((prev) => prev.filter((n) => n.data.canvasId !== activeCanvasId));
+    setEdges((prev) => prev.filter((e) => e.data?.canvasId !== activeCanvasId));
+    // Also remove child canvases of deleted nodes
+    const nodeIdsOnCanvas = nodes
+      .filter((n) => n.data.canvasId === activeCanvasId)
+      .map((n) => n.id);
+    setCanvases((prev) =>
+      prev.filter((c) => !nodeIdsOnCanvas.includes(c.parentNodeId ?? ""))
+    );
     setSelectedNodeId(null);
-  }, [updateActiveWorkspace]);
-
-  const addWorkspace = useCallback(
-    (name: string) => {
-      const ws = createWorkspace(name);
-      setWorkspaces((prev) => [...prev, ws]);
-      setActiveId(ws.id);
-      setSelectedNodeId(null);
-      return ws;
-    },
-    []
-  );
-
-  const switchWorkspace = useCallback(
-    (id: string) => {
-      setActiveId(id);
-      setActiveWorkspaceId(id);
-      setSelectedNodeId(null);
-    },
-    []
-  );
-
-  const deleteWorkspace = useCallback(
-    (id: string) => {
-      setWorkspaces((prev) => {
-        const remaining = prev.filter((w) => w.id !== id);
-        if (remaining.length === 0) {
-          const fresh = createWorkspace("Canvas 1");
-          setActiveId(fresh.id);
-          return [fresh];
-        }
-        if (activeWorkspaceId === id) {
-          setActiveId(remaining[0].id);
-        }
-        return remaining;
-      });
-      setSelectedNodeId(null);
-    },
-    [activeWorkspaceId]
-  );
-
-  const renameWorkspace = useCallback(
-    (id: string, name: string) => {
-      setWorkspaces((prev) =>
-        prev.map((w) => (w.id === id ? { ...w, name } : w))
-      );
-    },
-    []
-  );
+  }, [activeCanvasId, nodes]);
 
   return {
     initialized,
-    workspaces,
-    activeWorkspace,
-    activeWorkspaceId,
-    nodes,
-    edges,
+    canvases,
+    activeCanvas,
+    activeCanvasId,
+    currentNodes,
+    currentEdges,
     selectedNode,
     selectedNodeId,
+    breadcrumbs,
     setSelectedNodeId,
     onNodesChange,
     onEdgesChange,
@@ -251,12 +307,10 @@ export function useCanvasStore() {
     updateNodeData,
     deleteNode,
     deleteEdge,
-    updateEdgeRelationship,
+    navigateInto,
+    navigateTo,
+    navigateUp,
     save,
     clearCanvas,
-    addWorkspace,
-    switchWorkspace,
-    deleteWorkspace,
-    renameWorkspace,
   };
 }

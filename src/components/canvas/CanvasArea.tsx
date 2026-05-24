@@ -11,9 +11,10 @@ import {
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Trash2 } from "lucide-react";
+import { Trash2, FolderOpen } from "lucide-react";
 import { nodeTypes } from "@/components/nodes";
 import type { CanvasNode, CanvasEdge, NodeType } from "@/types/canvas";
+import { DRILLABLE_TYPES } from "@/types/canvas";
 import type { OnNodesChange, OnEdgesChange, Connection } from "@xyflow/react";
 
 interface CanvasAreaProps {
@@ -23,6 +24,7 @@ interface CanvasAreaProps {
   onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
   onNodeClick: (nodeId: string) => void;
+  onNodeDoubleClick: (nodeId: string) => void;
   onAddNode: (type: NodeType, position: { x: number; y: number }) => void;
   onDeleteNode: (nodeId: string) => void;
 }
@@ -34,6 +36,7 @@ export function CanvasArea({
   onEdgesChange,
   onConnect,
   onNodeClick,
+  onNodeDoubleClick,
   onAddNode,
   onDeleteNode,
 }: CanvasAreaProps) {
@@ -43,6 +46,7 @@ export function CanvasArea({
     x: number;
     y: number;
     nodeId: string;
+    canDrillIn: boolean;
   } | null>(null);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -73,12 +77,23 @@ export function CanvasArea({
     [onNodeClick]
   );
 
+  const handleNodeDoubleClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      onNodeDoubleClick(node.id);
+    },
+    [onNodeDoubleClick]
+  );
+
   const handleNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: Node) => {
       event.preventDefault();
-      setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
+      const canvasNode = nodes.find((n) => n.id === node.id);
+      const canDrillIn = canvasNode
+        ? DRILLABLE_TYPES.includes(canvasNode.data.nodeType)
+        : false;
+      setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id, canDrillIn });
     },
-    []
+    [nodes]
   );
 
   const handlePaneClick = useCallback(() => {
@@ -115,6 +130,7 @@ export function CanvasArea({
         onDrop={onDrop}
         onDragOver={onDragOver}
         onNodeClick={handleNodeClick}
+        onNodeDoubleClick={handleNodeDoubleClick}
         onNodeContextMenu={handleNodeContextMenu}
         onPaneClick={handlePaneClick}
         nodeTypes={nodeTypes}
@@ -144,9 +160,13 @@ export function CanvasArea({
               project: "#3b82f6",
               task: "#22c55e",
               document: "#a855f7",
-              person: "#f97316",
-              milestone: "#eab308",
+              team: "#f97316",
+              goal: "#84cc16",
+              timeline: "#06b6d4",
+              deadline: "#eab308",
               risk: "#ef4444",
+              meeting: "#8b5cf6",
+              resource: "#14b8a6",
             };
             return colorMap[type] ?? "#666";
           }}
@@ -163,6 +183,18 @@ export function CanvasArea({
             className="fixed z-50 bg-[#1a1a2e] border border-white/10 rounded-lg shadow-xl py-1 min-w-[160px]"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
+            {contextMenu.canDrillIn && (
+              <button
+                onClick={() => {
+                  onNodeDoubleClick(contextMenu.nodeId);
+                  setContextMenu(null);
+                }}
+                className="w-full px-3 py-2 text-sm text-white/80 hover:bg-white/5 flex items-center gap-2 transition-colors"
+              >
+                <FolderOpen size={14} />
+                Open
+              </button>
+            )}
             <button
               onClick={() => {
                 onDeleteNode(contextMenu.nodeId);

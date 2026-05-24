@@ -1,13 +1,12 @@
 "use client";
 
 import { useCallback } from "react";
-import { X, Trash2, Paperclip } from "lucide-react";
+import { X, Trash2, Paperclip, FolderOpen } from "lucide-react";
 import { v4 as uuid } from "uuid";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -18,16 +17,17 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { CanvasNode, NodeData, Priority } from "@/types/canvas";
-import { STATUS_OPTIONS, NODE_COLORS } from "@/types/canvas";
+import { STATUS_OPTIONS, NODE_COLORS, DRILLABLE_TYPES, NODE_LABELS } from "@/types/canvas";
 
 interface DetailsPanelProps {
   node: CanvasNode | null;
   onUpdate: (nodeId: string, updates: Partial<NodeData>) => void;
   onDelete: (nodeId: string) => void;
+  onOpen: (nodeId: string) => void;
   onClose: () => void;
 }
 
-export function DetailsPanel({ node, onUpdate, onDelete, onClose }: DetailsPanelProps) {
+export function DetailsPanel({ node, onUpdate, onDelete, onOpen, onClose }: DetailsPanelProps) {
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!node || !e.target.files) return;
@@ -68,7 +68,8 @@ export function DetailsPanel({ node, onUpdate, onDelete, onClose }: DetailsPanel
   const { data } = node;
   const nodeType = data.nodeType;
   const colors = NODE_COLORS[nodeType];
-  const statuses = STATUS_OPTIONS[nodeType];
+  const statuses = STATUS_OPTIONS[nodeType] ?? ["Active", "Inactive"];
+  const canDrillIn = DRILLABLE_TYPES.includes(nodeType);
 
   return (
     <div className="w-[320px] border-l border-white/10 bg-[#0f0f12] flex flex-col">
@@ -78,8 +79,8 @@ export function DetailsPanel({ node, onUpdate, onDelete, onClose }: DetailsPanel
             className="w-3 h-3 rounded-full"
             style={{ backgroundColor: colors.border }}
           />
-          <h2 className="text-sm font-semibold text-white/80 capitalize">
-            {nodeType} Details
+          <h2 className="text-sm font-semibold text-white/80">
+            {NODE_LABELS[nodeType]} Details
           </h2>
         </div>
         <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors">
@@ -89,6 +90,18 @@ export function DetailsPanel({ node, onUpdate, onDelete, onClose }: DetailsPanel
 
       <ScrollArea className="flex-1">
         <div className="p-4 flex flex-col gap-4">
+          {canDrillIn && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onOpen(node.id)}
+              className="w-full justify-start text-sm text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 border border-blue-400/20"
+            >
+              <FolderOpen size={14} className="mr-2" />
+              Open {NODE_LABELS[nodeType]}
+            </Button>
+          )}
+
           <div className="space-y-1.5">
             <Label className="text-xs text-white/60">Title</Label>
             <Input
@@ -170,6 +183,16 @@ export function DetailsPanel({ node, onUpdate, onDelete, onClose }: DetailsPanel
                 className="bg-white/5 border-white/10 text-white text-sm"
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-white/60">Owner</Label>
+            <Input
+              value={data.owner ?? ""}
+              onChange={(e) => onUpdate(node.id, { owner: e.target.value })}
+              className="bg-white/5 border-white/10 text-white text-sm"
+              placeholder="Assign owner..."
+            />
           </div>
 
           <div className="space-y-1.5">

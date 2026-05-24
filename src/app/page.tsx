@@ -18,15 +18,23 @@ export default function HomePage() {
     [store]
   );
 
+  const handleNodeDoubleClick = useCallback(
+    (nodeId: string) => {
+      store.navigateInto(nodeId);
+    },
+    [store]
+  );
+
   const handleClosePanel = useCallback(() => {
     store.setSelectedNodeId(null);
   }, [store]);
 
+  // Auto-save on changes
   useEffect(() => {
     if (store.initialized) {
       store.save();
     }
-  }, [store.nodes, store.edges, store.workspaces, store.initialized]);
+  }, [store.currentNodes, store.currentEdges, store.canvases, store.initialized]);
 
   if (!store.initialized) {
     return (
@@ -36,28 +44,29 @@ export default function HomePage() {
     );
   }
 
+  const canGoBack = (store.activeCanvas?.parentCanvasId ?? null) !== null;
+
   return (
     <div className="h-screen w-screen bg-[#0a0a0f] flex flex-col overflow-hidden">
       <TopBar
-        workspaces={store.workspaces}
-        activeWorkspaceId={store.activeWorkspaceId}
+        breadcrumbs={store.breadcrumbs}
+        canGoBack={canGoBack}
+        onNavigateTo={store.navigateTo}
+        onNavigateUp={store.navigateUp}
         onSave={store.save}
         onClear={store.clearCanvas}
-        onAddWorkspace={store.addWorkspace}
-        onSwitchWorkspace={store.switchWorkspace}
-        onDeleteWorkspace={store.deleteWorkspace}
-        onRenameWorkspace={store.renameWorkspace}
       />
       <div className="flex flex-1 overflow-hidden">
-        <Toolbox />
+        <Toolbox level={store.activeCanvas?.level ?? "workspace"} />
         <ReactFlowProvider>
           <CanvasArea
-            nodes={store.nodes}
-            edges={store.edges}
+            nodes={store.currentNodes}
+            edges={store.currentEdges}
             onNodesChange={store.onNodesChange}
             onEdgesChange={store.onEdgesChange}
             onConnect={store.onConnect}
             onNodeClick={handleNodeClick}
+            onNodeDoubleClick={handleNodeDoubleClick}
             onAddNode={store.addNode}
             onDeleteNode={store.deleteNode}
           />
@@ -66,6 +75,7 @@ export default function HomePage() {
           node={store.selectedNode}
           onUpdate={store.updateNodeData}
           onDelete={store.deleteNode}
+          onOpen={handleNodeDoubleClick}
           onClose={handleClosePanel}
         />
       </div>

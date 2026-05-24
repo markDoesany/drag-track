@@ -1,86 +1,60 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Save, Trash2, RotateCcw, Pencil } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import type { CanvasWorkspace } from "@/types/canvas";
+import type { BreadcrumbItem } from "@/hooks/useCanvasStore";
 
 interface TopBarProps {
-  workspaces: CanvasWorkspace[];
-  activeWorkspaceId: string | null;
+  breadcrumbs: BreadcrumbItem[];
+  canGoBack: boolean;
+  onNavigateTo: (canvasId: string) => void;
+  onNavigateUp: () => void;
   onSave: () => void;
   onClear: () => void;
-  onAddWorkspace: (name: string) => void;
-  onSwitchWorkspace: (id: string) => void;
-  onDeleteWorkspace: (id: string) => void;
-  onRenameWorkspace: (id: string, name: string) => void;
 }
 
 export function TopBar({
-  workspaces,
-  activeWorkspaceId,
+  breadcrumbs,
+  canGoBack,
+  onNavigateTo,
+  onNavigateUp,
   onSave,
   onClear,
-  onAddWorkspace,
-  onSwitchWorkspace,
-  onDeleteWorkspace,
-  onRenameWorkspace,
 }: TopBarProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-
-  const startRename = (id: string, currentName: string) => {
-    setEditingId(id);
-    setEditName(currentName);
-  };
-
-  const finishRename = () => {
-    if (editingId && editName.trim()) {
-      onRenameWorkspace(editingId, editName.trim());
-    }
-    setEditingId(null);
-    setEditName("");
-  };
-
   return (
-    <div className="h-12 border-b border-white/10 bg-[#0a0a0f] flex items-center px-4 gap-2">
+    <div className="h-12 border-b border-white/10 bg-[#0a0a0f] flex items-center px-4 gap-3">
+      {canGoBack && (
+        <button
+          onClick={onNavigateUp}
+          className="flex items-center gap-1 px-2 py-1 text-xs text-white/50 hover:text-white/90 hover:bg-white/5 rounded transition-colors"
+        >
+          <ChevronLeft size={14} />
+          Back
+        </button>
+      )}
+
       <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-        {workspaces.map((ws) => (
-          <div key={ws.id} className="flex items-center">
-            {editingId === ws.id ? (
-              <Input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onBlur={finishRename}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") finishRename();
-                  if (e.key === "Escape") setEditingId(null);
-                }}
-                className="h-7 w-[120px] text-xs bg-white/10 border-white/20 text-white"
-                autoFocus
-              />
-            ) : (
+        {breadcrumbs.map((crumb, idx) => {
+          const isLast = idx === breadcrumbs.length - 1;
+          return (
+            <div key={crumb.canvasId} className="flex items-center">
+              {idx > 0 && (
+                <ChevronRight size={12} className="text-white/20 mx-1" />
+              )}
               <button
-                onClick={() => onSwitchWorkspace(ws.id)}
-                onDoubleClick={() => startRename(ws.id, ws.name)}
-                className={`px-3 py-1.5 text-xs font-medium rounded transition-all ${
-                  ws.id === activeWorkspaceId
-                    ? "bg-white/10 text-white border border-white/20"
-                    : "text-white/50 hover:text-white/80 hover:bg-white/5"
+                onClick={() => !isLast && onNavigateTo(crumb.canvasId)}
+                disabled={isLast}
+                className={`px-2 py-1 text-xs font-medium rounded transition-all ${
+                  isLast
+                    ? "text-white bg-white/10 border border-white/20 cursor-default"
+                    : "text-white/50 hover:text-white/90 hover:bg-white/5"
                 }`}
               >
-                {ws.name}
+                {crumb.title}
               </button>
-            )}
-          </div>
-        ))}
-        <button
-          onClick={() => onAddWorkspace(`Canvas ${workspaces.length + 1}`)}
-          className="p-1.5 text-white/40 hover:text-white/80 hover:bg-white/5 rounded transition-colors"
-        >
-          <Plus size={14} />
-        </button>
+            </div>
+          );
+        })}
       </div>
 
       <div className="flex items-center gap-1.5">
@@ -102,16 +76,6 @@ export function TopBar({
           <RotateCcw size={13} className="mr-1" />
           Clear
         </Button>
-        {workspaces.length > 1 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => activeWorkspaceId && onDeleteWorkspace(activeWorkspaceId)}
-            className="h-7 px-2.5 text-xs text-red-400/60 hover:text-red-400 hover:bg-red-400/10"
-          >
-            <Trash2 size={13} />
-          </Button>
-        )}
       </div>
     </div>
   );
