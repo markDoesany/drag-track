@@ -45,6 +45,9 @@ export default function HomePage() {
   }
 
   const canGoBack = (store.activeCanvas?.parentCanvasId ?? null) !== null;
+  const childNodes = store.selectedNode
+    ? store.getChildNodes(store.selectedNode.id)
+    : [];
 
   return (
     <div className="h-screen w-screen bg-[#0a0a0f] flex flex-col overflow-hidden">
@@ -73,6 +76,7 @@ export default function HomePage() {
         </ReactFlowProvider>
         <DetailsPanel
           node={store.selectedNode}
+          childNodes={childNodes}
           onUpdate={store.updateNodeData}
           onDelete={store.deleteNode}
           onOpen={handleNodeDoubleClick}

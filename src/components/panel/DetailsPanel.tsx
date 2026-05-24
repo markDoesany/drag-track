@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { X, Trash2, Paperclip, FolderOpen } from "lucide-react";
+import { X, Trash2, Paperclip, FolderOpen, ChevronRight } from "lucide-react";
 import { v4 as uuid } from "uuid";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,13 +21,14 @@ import { STATUS_OPTIONS, NODE_COLORS, DRILLABLE_TYPES, NODE_LABELS } from "@/typ
 
 interface DetailsPanelProps {
   node: CanvasNode | null;
+  childNodes: CanvasNode[];
   onUpdate: (nodeId: string, updates: Partial<NodeData>) => void;
   onDelete: (nodeId: string) => void;
   onOpen: (nodeId: string) => void;
   onClose: () => void;
 }
 
-export function DetailsPanel({ node, onUpdate, onDelete, onOpen, onClose }: DetailsPanelProps) {
+export function DetailsPanel({ node, childNodes, onUpdate, onDelete, onOpen, onClose }: DetailsPanelProps) {
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!node || !e.target.files) return;
@@ -91,15 +92,49 @@ export function DetailsPanel({ node, onUpdate, onDelete, onOpen, onClose }: Deta
       <ScrollArea className="flex-1">
         <div className="p-4 flex flex-col gap-4">
           {canDrillIn && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onOpen(node.id)}
-              className="w-full justify-start text-sm text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 border border-blue-400/20"
-            >
-              <FolderOpen size={14} className="mr-2" />
-              Open {NODE_LABELS[nodeType]}
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onOpen(node.id)}
+                className="w-full justify-start text-sm text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 border border-blue-400/20"
+              >
+                <FolderOpen size={14} className="mr-2" />
+                Open {NODE_LABELS[nodeType]}
+              </Button>
+
+              {childNodes.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-white/60">
+                    Contents ({childNodes.length})
+                  </Label>
+                  <div className="flex flex-col gap-1">
+                    {childNodes.map((child) => {
+                      const childColors = NODE_COLORS[child.data.nodeType];
+                      return (
+                        <div
+                          key={child.id}
+                          className="flex items-center gap-2 px-2.5 py-1.5 rounded bg-white/5 hover:bg-white/8 transition-colors"
+                        >
+                          <div
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: childColors?.border ?? "#666" }}
+                          />
+                          <span className="text-xs text-white/70 truncate flex-1">
+                            {child.data.title}
+                          </span>
+                          <span className="text-[10px] text-white/30 uppercase">
+                            {NODE_LABELS[child.data.nodeType]}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <Separator className="bg-white/10" />
+            </>
           )}
 
           <div className="space-y-1.5">

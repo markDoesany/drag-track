@@ -270,6 +270,16 @@ export function useCanvasStore() {
     }
   }, [activeCanvas]);
 
+  // Get child nodes of a given node (nodes in its child canvas)
+  const getChildNodes = useCallback(
+    (nodeId: string): CanvasNode[] => {
+      const childCanvas = canvases.find((c) => c.parentNodeId === nodeId);
+      if (!childCanvas) return [];
+      return nodes.filter((n) => n.data.canvasId === childCanvas.id);
+    },
+    [canvases, nodes]
+  );
+
   const save = useCallback(() => {
     const state: AppState = { canvases, nodes, edges, activeCanvasId };
     saveAppState(state);
@@ -310,6 +320,7 @@ export function useCanvasStore() {
     navigateInto,
     navigateTo,
     navigateUp,
+    getChildNodes,
     save,
     clearCanvas,
   };
